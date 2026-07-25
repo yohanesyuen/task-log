@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task Log Entry frontmatter",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scope", "task", "event"],
+  "properties": {
+    "scope": {
+      "type": "string",
+      "description": "Namespace grouping related tasks — a spec directory name, a milestone, a subsystem, or 'default' for projects that don't group at all.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "task": {
+      "type": "string",
+      "description": "Task identifier within the scope, e.g. T064, ISSUE-123, or auth-refactor.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "event": {
+      "type": "string",
+      "enum": ["implemented", "verified", "correction", "gap", "deferred", "blocked", "retracted", "note"]
+    },
+    "status": {
+      "type": "string",
+      "description": "Advisory only. Whatever checklist the project already keeps remains the sole authority for completion — this field never overrides it.",
+      "enum": ["todo", "wip", "done", "partial", "blocked"]
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+      "description": "Short kebab-case reason codes, free-form vocabulary (unlike event)."
+    },
+    "related": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9._-]*/)?[A-Za-z0-9][A-Za-z0-9._-]*$"
+      },
+      "description": "Other task IDs this entry references. Bare form (T036) means same-scope; scope-prefixed form (other-scope/T036) means cross-scope — task IDs commonly collide across scopes, so a bare ID is always resolved against this entry's own `scope` field."
+    },
+    "refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "File paths, PR references (e.g. 'PR#42'), or commit SHAs. Open-ended, minimally validated."
+    },
+    "supersedes": {
+      "type": "string",
+      "description": "Only meaningful on event=correction or event=retracted: the filename of the entry being corrected or retracted.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[A-Za-z0-9][A-Za-z0-9._-]*-[0-9]{2}\\.md$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "event": { "enum": ["correction", "retracted"] } },
+        "required": ["event"]
+      },
+      "then": { "required": ["supersedes"] }
+    }
+  ]
+}

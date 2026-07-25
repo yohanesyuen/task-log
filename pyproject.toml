@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tasklog"
+version = "0.2.0"
+description = "Append-only, per-entry dated task log for any checklist-driven project"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "jsonschema>=4.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+tasklog = "tasklog.cli:main"
+
+[project.entry-points."tasklog.extensions"]
+speckit = "tasklog.contrib.speckit:Extension"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tasklog"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
