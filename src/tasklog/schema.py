@@ -30,7 +30,46 @@ def load_schema() -> dict:
     if overlay is not None:
         for prop, subschema in overlay().items():
             schema["properties"].setdefault(prop, {}).update(subschema)
+
+    _apply_extra_event_verbs(schema, _collect_extra_event_verbs())
     return schema
+
+
+def _collect_extra_event_verbs() -> list[str]:
+    """Verbs to append to `event`'s enum, gathered additively so a project
+    can widen the vocabulary without restating (and risking dropping) the
+    base list or the correction/retracted->supersedes invariant that goes
+    with it. Two sources, both optional: a host repo's
+    docs/task-log.events.json (`{"extra_events": [...]}`) and the active
+    extension's `event_verbs()` hook, for a reusable convention shipped as
+    an installable package."""
+    verbs: list[str] = []
+
+    override = paths.events_override_path()
+    if override.is_file():
+        data = json.loads(override.read_text(encoding="utf-8"))
+        verbs.extend(data.get("extra_events", []))
+
+    extra_from_extension = extensions.hook("event_verbs")
+    if extra_from_extension is not None:
+        verbs.extend(extra_from_extension())
+
+    return verbs
+
+
+def _apply_extra_event_verbs(schema: dict, extra_verbs: list[str]) -> None:
+    """Append `extra_verbs` to schema["properties"]["event"]["enum"] in
+    place, deduplicated and order-preserving. A no-op if the effective
+    schema (e.g. after a full docs/task-log.schema.json replacement) has no
+    `event` enum to extend -- there is nothing sane to append to."""
+    if not extra_verbs:
+        return
+    enum = schema.get("properties", {}).get("event", {}).get("enum")
+    if not isinstance(enum, list):
+        return
+    for verb in extra_verbs:
+        if verb not in enum:
+            enum.append(verb)
 
 
 def validate_entry(frontmatter: dict) -> None:

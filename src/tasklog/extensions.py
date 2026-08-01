@@ -14,6 +14,7 @@ absent:
     validate_scope(scope)      -> raise ValidationError to reject a scope
     checklist_path(scope)      -> Path `migrate` should read when --file is omitted
     schema_overlay()           -> {property: subschema} merged over the base schema
+    event_verbs()              -> list[str] appended to the base `event` enum
 
 Extensions are discovered through the `tasklog.extensions` entry point group,
 so a project can ship its own without this package knowing about it.

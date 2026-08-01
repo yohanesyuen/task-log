@@ -35,7 +35,15 @@ def _csv(value: str | None) -> list[str] | None:
 )
 @click.version_option(package_name="tasklog")
 def cli(repo_root: Path | None, extension: str | None) -> None:
-    """Append-only, per-entry dated log of task history."""
+    """Append-only, per-entry dated log of task history.
+
+    Extensible per host repo: docs/task-log.schema.json fully replaces the
+    packaged frontmatter schema; docs/task-log.events.json (`{"extra_events":
+    [...]}`) additively widens the closed `event` vocabulary without
+    restating it. An installable --extension (e.g. speckit) can layer scope/
+    task-id conventions and its own event_verbs() on top. See README.md
+    "Extensions" and "Layout in the host repo" for the full contract.
+    """
     paths.set_repo_root(repo_root)
     extensions.set_active(extension or extensions.resolve_from_environment())
 
@@ -43,7 +51,13 @@ def cli(repo_root: Path | None, extension: str | None) -> None:
 @cli.command("add", help="Record one new task log entry.")
 @click.option("--scope", default=entries.DEFAULT_SCOPE, show_default=True)
 @click.option("--task", required=True)
-@click.option("--event", required=True)
+@click.option(
+    "--event",
+    required=True,
+    help="One of the base verbs (implemented, verified, correction, gap, deferred, "
+         "blocked, retracted, note), plus any this host repo added via "
+         "docs/task-log.events.json or an extension's event_verbs().",
+)
 @click.option("--status")
 @click.option("--tags", help="Comma-separated.")
 @click.option("--related", help="Comma-separated.")

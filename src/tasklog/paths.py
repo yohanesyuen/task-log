@@ -62,5 +62,9 @@ def schema_override_path() -> Path:
     return repo_root() / "docs" / "task-log.schema.json"
 
 
+def events_override_path() -> Path:
+    return repo_root() / "docs" / "task-log.events.json"
+
+
 def task_log_root() -> Path:
     return repo_root() / "docs" / "task-log"
