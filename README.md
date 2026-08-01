@@ -137,6 +137,7 @@ class Extension:
     def validate_scope(self, scope: str) -> None: ...      # raise ValidationError to reject
     def checklist_path(self, scope: str) -> Path: ...      # where `migrate` looks by default
     def schema_overlay(self) -> dict: ...                  # {property: subschema} merged over the base
+    def event_verbs(self) -> list[str]: ...                # extra verbs appended to the base `event` enum
 ```
 
 ```toml
@@ -144,19 +145,48 @@ class Extension:
 my-convention = "mypkg.tasklog_ext:Extension"
 ```
 
+### Extending the `event` vocabulary
+
+`event` is deliberately a closed enum (`implemented`, `verified`,
+`correction`, `gap`, `deferred`, `blocked`, `retracted`, `note`) so entries
+stay queryable across every project. A project that needs its own verb on
+top of that set has two **additive** options — both only ever append, they
+never require restating (and risking silently dropping) the base list or the
+`correction`/`retracted` → `supersedes` invariant that ships with it:
+
+- **Per-repo, no extra tooling** — drop `docs/task-log.events.json`:
+  ```json
+  { "extra_events": ["completed", "shipped"] }
+  ```
+- **Reusable across repos** — an installable extension's `event_verbs()`
+  hook returns the same shape as a Python list.
+
+Don't hand-roll this by copying `src/tasklog/data/schema.json` into your own
+`docs/task-log.schema.json` and editing the `event` enum in place — that
+file is a **full replacement**, not a merge, and a naive copy is easy to get
+subtly wrong (e.g. dropping the `allOf` block that enforces
+`correction`/`retracted` require `--supersedes`). Use
+`docs/task-log.schema.json` only when you actually need to *tighten* a
+different field's pattern (as `speckit`'s `schema_overlay()` does for
+`scope`/`task`); use the additive routes above for verbs.
+
 ## Layout in the host repo
 
 ```
 docs/task-log/<scope>/      # entries land here, one file per note
 docs/task-log.md            # generated rollup (never hand-edited)
-docs/task-log.schema.json   # optional — overrides the packaged schema
+docs/task-log.schema.json   # optional — fully REPLACES the packaged schema
+docs/task-log.events.json   # optional — additively widens the `event` enum
 ```
 
 The frontmatter schema ships with the package
 ([`src/tasklog/data/schema.json`](src/tasklog/data/schema.json)). A host repo
-wanting stricter conventions can drop its own `docs/task-log.schema.json` in
-place and that one wins; an active extension's overlay is applied on top of
-whichever is used.
+wanting stricter conventions on a field *other than* `event` can drop its own
+`docs/task-log.schema.json` in place and that one wins outright (it replaces
+the packaged schema, it does not merge with it); an active extension's
+overlay is then applied on top of whichever schema was used. Independently of
+that, `docs/task-log.events.json` and an extension's `event_verbs()` both
+append to `event`'s enum wherever it ends up after the step above.
 
 ## Testing
 
@@ -172,6 +202,11 @@ touches this repo's own `docs/task-log/`.
 ## Status
 
 Extracted from an internal project once it proved generically useful.
+
+**0.3.0** adds the additive `event`-vocabulary extension points
+(`docs/task-log.events.json`, an extension's `event_verbs()`) — see
+"Extending the `event` vocabulary" above. Backward compatible: a repo with no
+override file behaves exactly as before.
 
 **0.2.0 is a breaking change** from 0.1.0: `--spec` became `--scope`, the
 `spec:` frontmatter field became `scope:`, and the spec-kit assumptions moved

@@ -1,11 +1,8 @@
 """
-Tests for the tasklog package's library layer (the code behind the CLI).
-
-Runs against a synthetic repo layout under a tempdir, pointed at via
-$TASKLOG_REPO_ROOT rather than by stubbing paths.repo_root() — root
-resolution is itself part of what's under test, so the tests go through the
-real resolution path. Nothing here touches this repo's own docs/task-log/ or
-specs/ directories.
+Tests for the tasklog package's core library layer: entries, migrate, and
+repo-root resolution. Schema/extension mechanics (frontmatter validation,
+the `event` vocabulary, speckit) live in test_tasklog_schema.py — split out
+once this file crossed the machine's 500-line convention.
 """
 
 from __future__ import annotations
@@ -17,93 +14,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tasklog import cli, entries, extensions, migrate, paths
-from tasklog.schema import ValidationError, load_schema, validate_entry
+from tasklog import cli, entries, migrate, paths
+from tasklog.schema import ValidationError
 
-
-class TaskLogTestCase(unittest.TestCase):
-    def setUp(self):
-        # Resolved up front: repo_root() resolves too, and on macOS an
-        # unresolved /var/... tempdir wouldn't compare equal to /private/var/...
-        self.tmp = Path(tempfile.mkdtemp()).resolve()
-        (self.tmp / "specs" / "003-fake-spec").mkdir(parents=True)
-        (self.tmp / "docs").mkdir()
-        paths.set_repo_root(None)
-        extensions.set_active(None)
-        self.patcher = mock.patch.dict(
-            os.environ, {paths.REPO_ROOT_ENV_VAR: str(self.tmp)}
-        )
-        self.patcher.start()
-
-    def tearDown(self):
-        self.patcher.stop()
-        paths.set_repo_root(None)
-        extensions.set_active(None)
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-
-class ValidateEntryTests(TaskLogTestCase):
-    """T004"""
-
-    def test_accepts_minimal_valid_entry(self):
-        validate_entry({"scope": "003-fake-spec", "task": "T001", "event": "note"})
-
-    def test_accepts_full_entry_with_all_optional_fields(self):
-        validate_entry({
-            "scope": "003-fake-spec",
-            "task": "T001",
-            "event": "implemented",
-            "status": "done",
-            "tags": ["push-token"],
-            "related": ["T002"],
-            "refs": ["src/tasklog/cli.py", "PR#42"],
-        })
-
-    def test_rejects_unknown_event_value(self):
-        with self.assertRaises(ValidationError):
-            validate_entry({"scope": "003-fake-spec", "task": "T001", "event": "bogus"})
-
-    def test_rejects_correction_missing_supersedes(self):
-        with self.assertRaises(ValidationError):
-            validate_entry({"scope": "003-fake-spec", "task": "T001", "event": "correction"})
-
-    def test_accepts_correction_with_supersedes(self):
-        validate_entry({
-            "scope": "003-fake-spec", "task": "T001", "event": "correction",
-            "supersedes": "2026-07-20-T001-01.md",
-        })
-
-    def test_rejects_additional_properties(self):
-        with self.assertRaises(ValidationError):
-            validate_entry({
-                "scope": "003-fake-spec", "task": "T001", "event": "note",
-                "not_a_real_field": "x",
-            })
-
-    def test_accepts_bare_same_spec_related_task_id(self):
-        validate_entry({
-            "scope": "003-fake-spec", "task": "T001", "event": "gap",
-            "related": ["T002"],
-        })
-
-    def test_accepts_spec_prefixed_cross_spec_related_task_id(self):
-        validate_entry({
-            "scope": "003-fake-spec", "task": "T001", "event": "gap",
-            "related": ["005-other-spec/T036"],
-        })
-
-    def test_accepts_free_form_task_id_without_an_extension(self):
-        validate_entry({"scope": "backend", "task": "auth-refactor", "event": "note"})
-
-    def test_rejects_malformed_related_reference(self):
-        # At most one scope/task separator, and no traversal segments.
-        for bad in ("a/b/c", "../evil", "/absolute"):
-            with self.subTest(related=bad):
-                with self.assertRaises(ValidationError):
-                    validate_entry({
-                        "scope": "003-fake-spec", "task": "T001", "event": "gap",
-                        "related": [bad],
-                    })
+from _base import TaskLogTestCase
 
 
 class NextSeqTests(TaskLogTestCase):
@@ -334,43 +248,6 @@ class MigrateTests(TaskLogTestCase):
             migrate.migrate_task("003-fake-spec", "T999", self.checklist)
 
 
-class SpeckitExtensionTests(TaskLogTestCase):
-    def setUp(self):
-        super().setUp()
-        extensions.set_active("speckit")
-
-    def test_rejects_scope_without_a_matching_spec_directory(self):
-        with self.assertRaises(ValidationError):
-            entries.add_entry(scope="999-nonexistent", task="T001", event="note",
-                               summary="x", date="2026-07-21")
-
-    def test_rejects_non_speckit_scope_name(self):
-        with self.assertRaises(ValidationError):
-            entries.add_entry(scope="backend", task="T001", event="note",
-                               summary="x", date="2026-07-21")
-
-    def test_overlay_tightens_task_ids_back_to_speckit_form(self):
-        with self.assertRaises(ValidationError):
-            entries.add_entry(scope="003-fake-spec", task="auth-refactor", event="note",
-                               summary="x", date="2026-07-21")
-
-    def test_accepts_speckit_shaped_scope_and_task(self):
-        result = entries.add_entry(scope="003-fake-spec", task="T042", event="note",
-                                    summary="x", date="2026-07-21")
-        self.assertTrue(result.path.is_file())
-
-    def test_migrate_infers_the_checklist_path(self):
-        tasks_md = self.tmp / "specs" / "003-fake-spec" / "tasks.md"
-        tasks_md.write_text("- [x] T001 Do it. **implemented 2026-07-19**: done.\n", encoding="utf-8")
-        result = migrate.migrate_task("003-fake-spec", "T001")
-        self.assertEqual(result.checklist_path, tasks_md)
-        self.assertEqual(len(result.added), 1)
-
-    def test_unknown_extension_name_is_an_error_not_a_silent_fallback(self):
-        with self.assertRaises(extensions.UnknownExtension):
-            extensions.set_active("no-such-extension")
-
-
 class MigrateWithoutExtensionTests(TaskLogTestCase):
     def _checklist(self, text: str) -> Path:
         path = self.tmp / "TODO.md"
@@ -467,19 +344,6 @@ class CliRepoRootLeakTests(unittest.TestCase):
         exit_code = cli.main(["--repo-root", str(self.tmp), "query", "--scope", "003-fake-spec"])
         self.assertEqual(exit_code, 0)
         self.assertIsNone(paths.repo_root_override())
-
-
-class SchemaSourceTests(TaskLogTestCase):
-    def test_uses_packaged_schema_when_host_has_no_override(self):
-        self.assertFalse(paths.schema_override_path().exists())
-        self.assertIn("event", load_schema()["properties"])
-
-    def test_host_override_takes_precedence(self):
-        paths.schema_override_path().write_text(
-            '{"type": "object", "properties": {"marker": {"type": "string"}}}',
-            encoding="utf-8",
-        )
-        self.assertIn("marker", load_schema()["properties"])
 
 
 if __name__ == "__main__":
