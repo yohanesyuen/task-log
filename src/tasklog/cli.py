@@ -49,8 +49,14 @@ def cli(repo_root: Path | None, extension: str | None) -> None:
 
 
 @cli.command("add", help="Record one new task log entry.")
-@click.option("--scope", default=entries.DEFAULT_SCOPE, show_default=True)
-@click.option("--task", required=True)
+@click.option(
+    "--scope", default=entries.DEFAULT_SCOPE, show_default=True,
+    help="Alphanumeric, may contain '.', '_', '-' after the first character.",
+)
+@click.option(
+    "--task", required=True,
+    help="Alphanumeric, may contain '.', '_', '-' after the first character (e.g. 'T064').",
+)
 @click.option(
     "--event",
     required=True,
@@ -59,9 +65,16 @@ def cli(repo_root: Path | None, extension: str | None) -> None:
          "docs/task-log.events.json or an extension's event_verbs().",
 )
 @click.option("--status")
-@click.option("--tags", help="Comma-separated.")
-@click.option("--related", help="Comma-separated.")
-@click.option("--refs", help="Comma-separated.")
+@click.option(
+    "--tags",
+    help="Comma-separated, lowercase kebab-case each (e.g. 'doc-hygiene', 'pw45').",
+)
+@click.option(
+    "--related",
+    help="Comma-separated task IDs, each optionally scope-prefixed "
+         "(e.g. 'T036' or 'other-scope/T036').",
+)
+@click.option("--refs", help="Comma-separated. Open-ended, minimally validated.")
 @click.option("--supersedes", help="Filename of the entry this one corrects/retracts.")
 @click.option("--summary")
 @click.option("--body")
@@ -135,6 +148,7 @@ def cmd_query(scope: str, task: str | None, fmt: str) -> None:
 @click.option("--scope")
 def cmd_render(scope: str | None) -> None:
     out_path, content = entries.render_view(scope)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(content, encoding="utf-8")
     click.echo(str(out_path))
 

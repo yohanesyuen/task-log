@@ -177,6 +177,25 @@ class RenderViewTests(TaskLogTestCase):
         _, regenerated = entries.render_view("003-fake-spec")
         self.assertNotIn("MANUAL EDIT THAT SHOULD DISAPPEAR", regenerated)
 
+    def test_render_includes_status_related_and_refs(self):
+        entries.add_entry(
+            scope="003-fake-spec", task="T001", event="note", status="todo",
+            tags=["a", "b"], related=["other-entry"],
+            refs=["docs/x.md", "commit:abc123"],
+            summary="probe entry", date="2026-07-21",
+        )
+        _, content = entries.render_view("003-fake-spec")
+        self.assertIn("(todo)", content)
+        self.assertIn("tags: a, b", content)
+        self.assertIn("related: other-entry", content)
+        self.assertIn("refs: docs/x.md, commit:abc123", content)
+
+    def test_cmd_render_creates_missing_docs_directory(self):
+        shutil.rmtree(self.tmp / "docs")
+        exit_code = cli.main(["render", "--scope", "003-fake-spec"])
+        self.assertEqual(exit_code, 0)
+        self.assertTrue((self.tmp / "docs" / "task-log-003-fake-spec.md").is_file())
+
 
 class MigrateTests(TaskLogTestCase):
     """T017, T018"""
