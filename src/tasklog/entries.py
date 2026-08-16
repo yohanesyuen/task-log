@@ -190,9 +190,16 @@ def render_view(scope: str | None = None) -> tuple[Path, str]:
             for e in by_task[task_id]:
                 fm = e["frontmatter"]
                 date = e["path"].name[:10]
-                lines.append(f"**{date} — {fm.get('event')}**")
+                header = f"**{date} — {fm.get('event')}**"
+                if fm.get("status"):
+                    header += f" ({fm['status']})"
+                lines.append(header)
                 if fm.get("tags"):
                     lines.append(f"tags: {', '.join(fm['tags'])}")
+                if fm.get("related"):
+                    lines.append(f"related: {', '.join(fm['related'])}")
+                if fm.get("refs"):
+                    lines.append(f"refs: {', '.join(fm['refs'])}")
                 lines.append("")
                 lines.append(e["body"])
                 lines.append("")
